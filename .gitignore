@@ -1,2 +1,18 @@
-logs/*.log 
-RallyETA.exe 
+# Ortam ve editör
+venv/
+.claude/
+__pycache__/
+.coverage
+
+# Build / dağıtım
+build/
+dist/
+logs/
+*.exe
+*.zip
+
+# Geçici / büyük veriler (şimdilik)
+RallyETA_Portable_old2/
+RallyETA_Portable_v1.0/
+RallyETA_Portable_v1.0.zip
+RallyETA_Portable_v1.0_old.zip
