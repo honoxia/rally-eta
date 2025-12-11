@@ -9,7 +9,9 @@
 
 ## 🎯 Overview
 
-This system uses machine learning (LightGBM) to predict what time a rally driver **would have achieved** if a red-flagged stage had run normally. It's designed for Turkish rally federation (TOSFED) to make fair notional time decisions.
+This system uses machine learning (LightGBM) to predict what time a rally driver **would have achieved** if a red-flagged stage had run normally.  
+The system currently uses **2023–2025 Turkish Rally Championship data (8,286 stage results)** collected via the new TOSFED scraper (v1.2).
+
 
 ### Key Features
 
@@ -55,9 +57,14 @@ python -m src.scraper.manual_entry
 python -c "from src.scraper.manual_entry import import_manual_data; import_manual_data('data/external/rally_data.xlsx')"
 ```
 
-**Option 2: Web Scraping** (Future)
-- TOSFED scraper: `python -m src.scraper.tosfed_scraper`
-- EWRC scraper: `python -m src.scraper.ewrc_scraper`
+**Option 2: Web Scraping (Available in v1.2)**
+
+### TOSFED Scraper (v1.2)
+
+Fully implemented, collects 2023–2025 Turkish Rally Championship results.
+
+```bash
+python -m src.scraper.tosfed_sonuc_scraper
 
 ### Training Pipeline
 
@@ -198,6 +205,15 @@ Model prediction based on: Driver's average on gravel surfaces is
 
 ## 📊 Model Performance
 
+## ⚠️ Important Note – Model v1.0 Metrics
+
+The results below belong to the initial MVP model (v1.0) trained on a
+very small dataset (30 samples).
+
+As of v1.2, the system now includes **8,286 stage results (2023–2025)** 
+collected via the new TOSFED scraper.  
+A new model (v1.3) is being prepared, and updated performance metrics 
+will replace these legacy numbers once training is complete.
 ### Current MVP Results (30 samples)
 
 | Split | Samples | MAE | MAPE | Status |
@@ -356,10 +372,10 @@ model.load('models/rally_eta_v2')
 - [x] Unit tests
 
 ### Phase 2: Production (In Progress)
-- [ ] TOSFED web scraper
+- [x] TOSFED web scraper (v1.2 complete)
 - [ ] EWRC web scraper
-- [ ] Real data (50+ rallies)
-- [ ] Model v2 training
+- [x] Real rally dataset integrated (8,286 stage results, 2023–2025)
+- [ ] Model v2 training (v1.3)
 - [ ] API endpoint (FastAPI)
 
 ### Phase 3: Advanced Features
@@ -397,7 +413,7 @@ This project is licensed under the MIT License - see LICENSE file for details.
 
 For questions or support:
 - Create an issue in GitHub
-- Email: [your-email@example.com]
+- Email: [serefdincer@gmail.com]
 
 ---
 
