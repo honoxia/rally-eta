@@ -135,13 +135,56 @@ def build_exe():
             '--hidden-import=webdriver_manager.chrome',
             '--hidden-import=bs4',
             '--hidden-import=requests',
+            
+            # Scipy hidden imports - critical for fixing ModuleNotFoundError
             '--hidden-import=scipy',
             '--hidden-import=scipy.stats',
+            '--hidden-import=scipy.sparse',
+            '--hidden-import=scipy.sparse.linalg',
+            '--hidden-import=scipy.sparse.csgraph',
+            '--hidden-import=scipy.special',
+            '--hidden-import=scipy._lib',
+            '--hidden-import=scipy._lib.messagestream',
+            '--hidden-import=scipy.spatial',
+            '--hidden-import=scipy.spatial.distance',
+            '--hidden-import=scipy.integrate',
+            '--hidden-import=scipy.interpolate',
+            '--hidden-import=scipy.optimize',
+            
+            # Sklearn hidden imports - critical for fixing ModuleNotFoundError
+            '--hidden-import=sklearn',
+            '--hidden-import=sklearn.ensemble',
+            '--hidden-import=sklearn.ensemble._forest',
+            '--hidden-import=sklearn.ensemble._gb_losses',
+            '--hidden-import=sklearn.tree',
+            '--hidden-import=sklearn.tree._tree',
+            '--hidden-import=sklearn.neighbors',
+            '--hidden-import=sklearn.neighbors._partition_nodes',
+            '--hidden-import=sklearn.utils',
+            '--hidden-import=sklearn.utils._cython_blas',
+            '--hidden-import=sklearn.utils._weight_vector',
+            '--hidden-import=sklearn.utils.murmurhash',
+            '--hidden-import=sklearn.utils.lgamma',
+            '--hidden-import=sklearn.utils.sparsefuncs_fast',
+            '--hidden-import=sklearn.utils._logistic_sigmoid',
+            '--hidden-import=sklearn.utils._random',
+            '--hidden-import=sklearn.utils._seq_dataset',
+            '--hidden-import=sklearn.utils._typedefs',
+            '--hidden-import=sklearn.metrics',
+            '--hidden-import=sklearn.metrics.pairwise',
+            '--hidden-import=sklearn.metrics._pairwise_distances_reduction',
+            '--hidden-import=sklearn.metrics._dist_metrics',
+            '--hidden-import=sklearn.preprocessing',
+            '--hidden-import=sklearn.preprocessing._csr_polynomial_expansion',
+            '--hidden-import=sklearn.linear_model',
+            '--hidden-import=sklearn.svm',
 
             # Streamlit paketlerini topla
             '--collect-all=streamlit',
             '--collect-all=altair',
             '--collect-all=plotly',
+            '--collect-all=scipy',
+            '--collect-all=sklearn',
             '--collect-all=pyarrow',
             '--collect-all=selenium',
 
@@ -207,7 +250,7 @@ def create_installer():
     iss_content = """
 [Setup]
 AppName=Rally ETA Tahmin Sistemi
-AppVersion=1.0
+AppVersion=1.2
 DefaultDirName={autopf}\\RallyETA
 DefaultGroupName=Rally ETA
 OutputDir=installer

@@ -357,6 +357,7 @@ class NotionalTimePredictor:
 
     def predict_for_manual_input(self,
                                  driver_id: str,
+                                 driver_name: str,  # NEW: Accept driver_name from UI
                                  stage_length_km: float,
                                  surface: str,
                                  day_or_night: str = 'day',
@@ -367,6 +368,7 @@ class NotionalTimePredictor:
 
         Args:
             driver_id: Driver ID from database
+            driver_name: Driver name from UI selection (to avoid database mismatch)
             stage_length_km: Stage length in km
             surface: 'gravel' or 'asphalt'
             day_or_night: 'day' or 'night'
@@ -400,9 +402,10 @@ class NotionalTimePredictor:
         if len(driver_history) == 0:
             raise ValueError(f"No historical data found for driver {driver_id}")
 
-        # Get driver info
+        # Get driver info (car_class from history, but use PROVIDED driver_name)
         last_result = driver_history.iloc[0]
-        driver_name = last_result['driver_name']
+        # IMPORTANT: Use driver_name from parameter, NOT from database
+        # driver_name = last_result['driver_name']  # OLD - can be wrong!
         car_class = last_result['car_class']
 
         # Calculate momentum
@@ -478,7 +481,11 @@ class NotionalTimePredictor:
             'historical_avg_ratio': momentum_data['historical_avg'],
             'confidence': 'medium',
             'explanation': self._generate_manual_explanation(
-                driver_name, surface, predicted_ratio, ref_time, momentum_data
+                driver_name=driver_name,  # Use the driver_name from database query, not feature_row
+                surface=surface,
+                predicted_ratio=predicted_ratio,
+                ref_time=ref_time,
+                momentum_data=momentum_data
             )
         }
 

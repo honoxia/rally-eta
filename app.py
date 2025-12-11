@@ -22,7 +22,7 @@ from src.utils.database import Database
 from src.utils.logger import setup_logger
 from src.scraper.tosfed_sonuc_scraper import TOSFEDSonucScraper
 from src.preprocessing.clean_data import DataCleaner
-from src.features.engineer_features import FeatureEngineer
+from src.features.engineer_features_v1_1 import FeatureEngineerV1_1 as FeatureEngineer  # v1.1
 from src.models.train_model import RallyETAModel
 from src.inference.predict_notional_times import NotionalTimePredictor
 from config.config_loader import config
@@ -153,7 +153,7 @@ st.sidebar.metric("Model", "✅ Hazır" if status['model'] else "❌ Yok")
 
 # ========== ANA SAYFA ==========
 if page == "🏠 Ana Sayfa":
-    st.markdown('<div class="main-header">🏁 Rally Etap Zamanı Tahmin Sistemi</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">🏁 Rally Etap Zamanı Tahmin Sistemi v1.2</div>', unsafe_allow_html=True)
     st.markdown("### Kırmızı Bayrak Durumunda Notional Time Hesaplama")
 
     st.markdown("---")
@@ -434,7 +434,7 @@ elif page == "🕷️ Veri Toplama":
                             'raw_time_str': result['time_str'],
                             'time_seconds': parser.parse(result['time_str']),
                             'status': result['status'],
-                            'surface': 'gravel',
+                            'surface': rally_data.get('surface', 'gravel'),
                         }
                         all_results.append(row)
 
@@ -784,7 +784,7 @@ elif page == "🎯 Tahmin Yap":
                                     'stage_name': stage.get('stage_name', 'N/A'),
                                     'stage_number': stage.get('stage_number', 0),
                                     'stage_length_km': stage.get('stage_length_km', 0),
-                                    'surface': 'gravel'  # Default to gravel, TOSFED doesn't provide this
+                                    'surface': rally_info.get('surface', 'gravel')
                                 })
 
                             rally_data_df = pd.DataFrame(stages_list)
@@ -854,9 +854,13 @@ elif page == "🎯 Tahmin Yap":
                 with st.spinner("Tahmin yapılıyor..."):
                     try:
                         predictor = NotionalTimePredictor()
+                        
+                        # Extract driver name from selected label (format: "Driver Name (Class)")
+                        selected_driver_name = selected_driver_label.rsplit(" (", 1)[0]
 
                         prediction = predictor.predict_for_manual_input(
                             driver_id=selected_driver_id,
+                            driver_name=selected_driver_name,  # Pass driver name from UI
                             stage_length_km=selected_stage['stage_length_km'],
                             surface=selected_stage['surface'],
                             day_or_night='day',  # Can be extracted from TOSFED if available
@@ -1042,14 +1046,18 @@ elif page == "🎯 Tahmin Yap":
             with st.spinner("Tahmin yapılıyor..."):
                 try:
                     predictor = NotionalTimePredictor()
+                    
+                    # Extract driver name from selected label (format: "Driver Name (Class)")
+                    selected_driver_name = selected_driver_label.rsplit(" (", 1)[0]
 
                     prediction = predictor.predict_for_manual_input(
                         driver_id=selected_driver_id,
+                        driver_name=selected_driver_name,  # Pass the selected driver name from UI
                         stage_length_km=stage_length,
                         surface=surface,
                         day_or_night=day_or_night,
                         stage_number=stage_number,
-                        rally_name="Manuel Tahmin"
+                        rally_name="Manuel T ahmin"
                     )
 
                     st.success("✅ Tahmin tamamlandı!")

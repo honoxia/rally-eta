@@ -1,0 +1,17 @@
+{
+    "surface_mappings": {
+        "sarıkamış": "snow",
+        "bodrum": "asphalt",
+        "marmaris": "asphalt",
+        "kocaeli": "gravel",
+        "istanbul": "gravel",
+        "bursa": "asphalt",
+        "eskişehir": "asphalt",
+        "hitit": "gravel",
+        "yeşil bursa": "asphalt",
+        "ege": "asphalt",
+        "troia": "gravel",
+        "çanakkale": "gravel"
+    },
+    "default_surface": "gravel"
+}

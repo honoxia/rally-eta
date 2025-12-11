@@ -5,13 +5,8 @@ from typing import Any
 
 
 class Config:
-    def __init__(self, config_path: str = None):
-        if config_path is None:
-            # Relative to this file (config/config_loader.py -> config/config_v1_1.yaml)
-            self.config_path = Path(__file__).parent / "config_v1_1.yaml"
-        else:
-            self.config_path = Path(config_path)
-            
+    def __init__(self, config_path: str = "config/config.yaml"):
+        self.config_path = Path(config_path)
         self._config = self._load_config()
 
     def _load_config(self):

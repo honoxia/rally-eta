@@ -3,7 +3,7 @@ import pandas as pd
 import logging
 from src.utils.database import Database
 from src.preprocessing.time_parser import TimeParser
-from src.preprocessing.anomaly_detector import AnomalyDetector
+from src.preprocessing.anomaly_detector_v1_1 import AnomalyDetectorV1_1 as AnomalyDetector  # v1.1
 from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
