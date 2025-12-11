@@ -16,3 +16,26 @@ RallyETA_Portable_old2/
 RallyETA_Portable_v1.0/
 RallyETA_Portable_v1.0.zip
 RallyETA_Portable_v1.0_old.zip
+
+
+# Ignore all portable builds
+RallyETA_Portable_*/
+
+# Ignore ZIP releases
+*.zip
+
+# Ignore build artifacts
+build/
+dist/
+
+# Ignore logs
+*.log
+scraping_log*
+scraping_v2.log
+output.txt
+
+# Ignore databases and raw dumps
+*.db
+data/raw/*.csv
+data/raw/*.xlsx
+data/*_backup_*.db
