@@ -1,0 +1,57 @@
+# Local tooling and caches
+.claude/
+.codex/
+.astropy/
+.matplotlib/
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# Local runtime and temp directories
+.tmp_runtime/
+.tmp_testdata/
+tmp/
+tmp2/
+tmp_build/
+tmp_pip/
+tmp_test/
+tmp_*/
+tmp_test*/
+
+# Build artifacts
+build/
+build_*/
+dist/
+disttttt/
+RallyETA_Portable_*/
+*.exe
+*.zip
+
+# Logs and local reports
+logs/
+reports/
+exports/
+*.log
+error.txt
+output.txt
+
+# Local data and backups
+data/raw/*.db
+data/raw/*.csv
+data/raw/*.xlsx
+data/processed/
+dummy.db
+*_backup_*.db
+rally_results_backup_*.db
+tmp_*.db
+stage_metadata_*.xlsx
+stage_ml_dataset_*.csv
+
+# Keep only the current packaged model
+models/geometric_model_*.pkl
+!models/geometric_model_latest.pkl
+
+# Generated notebooks or duplicated worktrees
+codex/
+backups/
+nul
