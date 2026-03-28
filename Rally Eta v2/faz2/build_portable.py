@@ -1,5 +1,5 @@
 """
-RallyETA v2.0 - Portable Build Script
+Rally Result Prediction - Portable Build Script
 Creates a standalone executable with all dependencies.
 
 Usage:
@@ -15,10 +15,10 @@ from datetime import datetime
 
 
 def main():
-    """Build portable RallyETA v2.0 executable."""
+    """Build portable Rally Result Prediction executable."""
 
     print("=" * 60)
-    print("RallyETA v2.0 - Portable Build Script")
+    print("Rally Result Prediction - Portable Build Script")
     print("=" * 60)
 
     # Project root (faz2 folder)
@@ -138,7 +138,7 @@ gatherUsageStats = false
             print(f"OK - Database already in place: {dest_db}")
 
     # Create README for portable
-    readme_content = f"""# RallyETA v2.0 Portable
+    readme_content = f"""# Rally Result Prediction Portable
 
 ## Quick Start
 
@@ -153,7 +153,7 @@ gatherUsageStats = false
 ## Folder Structure
 
 ```
-RallyETA_Portable_v2.0/
+Portable package/
 ├── RallyETA_v2.exe          # Main executable
 ├── data/
 │   └── raw/                 # Database folder
@@ -164,6 +164,8 @@ RallyETA_Portable_v2.0/
 ```
 
 ## Features
+
+- **Stage result and notional time prediction system**
 
 - **3-Stage Prediction Pipeline**:
   1. Baseline Calculator (historical performance, momentum, surface)
@@ -185,7 +187,7 @@ Copy your rally_results.db to data/raw/ folder.
 
 ---
 
-**Version**: 2.0.0
+**Version**: 2.0.1
 **Build Date**: {datetime.now().strftime("%Y-%m-%d")}
 """
 
@@ -223,3 +225,4 @@ if __name__ == "__main__":
     success = main()
     if not success and sys.stdin.isatty():
         input("\nPress Enter to exit...")
+

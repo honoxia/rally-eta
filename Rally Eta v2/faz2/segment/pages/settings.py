@@ -168,7 +168,7 @@ def render():
     st.markdown("---")
 
     st.subheader("Hakkinda")
-    st.markdown(f"**Rally ETA v{VERSION}** - Notional Time Tahmin Sistemi")
+    st.markdown(f"**Rally Result Prediction v{VERSION}** - Stage result and notional time prediction system")
     st.markdown(f"Build: {BUILD_DATE}")
 
     st.markdown("---")

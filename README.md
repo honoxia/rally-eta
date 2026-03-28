@@ -1,6 +1,8 @@
-# Rally ETA v2
+# Rally Result Prediction
 
-Rally ETA is a desktop-oriented rally stage ETA and notional time support system for red-flag scenarios.
+Stage result and notional time prediction system.
+
+Rally Result Prediction is a desktop-oriented rally stage result and notional time support system for red-flag scenarios.
 
 The current `main` branch represents the v2 application line. The legacy v1.2 line is preserved as tag `v1.2.0`.
 

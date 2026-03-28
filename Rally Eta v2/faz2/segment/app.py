@@ -60,9 +60,9 @@ PAGE_META = {
 st.sidebar.markdown(
     """
     <section class="sidebar-brand">
-        <div class="sidebar-brand__eyebrow">Rally ETA v2</div>
-        <h2>Ralli operasyon merkezi</h2>
-        <p>Sonuc toplama, etap geometrisi ve tahmin akislari tek masaustu ekranda bir arada.</p>
+        <div class="sidebar-brand__eyebrow">Rally Result Prediction</div>
+        <h2>Ralli tahmin merkezi</h2>
+        <p>Stage result and notional time prediction system.</p>
     </section>
     """,
     unsafe_allow_html=True,

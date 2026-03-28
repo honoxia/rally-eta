@@ -1,8 +1,10 @@
-# Rally ETA v2
+# Rally Result Prediction
 
-This folder contains the active Rally ETA v2 application workspace.
+Stage result and notional time prediction system.
 
-Rally ETA v2 is a desktop-oriented Streamlit application for rally stage ETA and notional time support during red-flag scenarios. It combines the existing ML-based prediction flow with operational tools used on rally day.
+This folder contains the active Rally Result Prediction application workspace.
+
+Rally Result Prediction is a desktop-oriented Streamlit application for rally stage result and notional time support during red-flag scenarios. It combines the existing ML-based prediction flow with operational tools used on rally day.
 
 ## Current Scope
 

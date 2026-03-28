@@ -56,11 +56,11 @@ MODEL_FILENAME = "geometric_model_latest.pkl"
 # UI sabitleri
 MAX_TABLE_ROWS = 50
 PAGE_ICON = "R"
-PAGE_TITLE = "Rally ETA v2.0"
+PAGE_TITLE = "Rally Result Prediction"
 
 # Versiyon
-VERSION = "2.0.0"
-BUILD_DATE = "2025-12-31"
+VERSION = "2.0.1"
+BUILD_DATE = "2026-03-29"
 
 
 def init_session_state():

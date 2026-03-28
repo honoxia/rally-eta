@@ -738,7 +738,7 @@ def _html(block: str) -> str:
     return dedent(block).strip()
 
 
-def render_page_header(title: str, description: str, badge: Optional[str] = None, eyebrow: str = "Rally ETA v2"):
+def render_page_header(title: str, description: str, badge: Optional[str] = None, eyebrow: str = "Rally Result Prediction"):
     """Tum sayfalarda kullanilan hero baslik."""
     badge_html = f'<div class="page-hero__badge">{escape(badge)}</div>' if badge else ""
     st.markdown(
