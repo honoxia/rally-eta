@@ -1,6 +1,7 @@
 import unittest
 
 from src.prediction.manual_calculator import (
+    build_manual_payload_from_rally,
     calculate_manual_stage_estimate,
     format_manual_time,
     parse_manual_time_input,
@@ -83,6 +84,75 @@ class ManualCalculatorTests(unittest.TestCase):
 
         self.assertEqual(result.used_stage_count, 1)
         self.assertTrue(any("düşük güven" in warning for warning in result.warnings))
+
+    def test_build_manual_payload_from_rally_uses_raw_class_and_previous_stages(self):
+        rally_data = {
+            "rally_name": "Test Rallisi",
+            "stages": [
+                {
+                    "stage_number": 1,
+                    "stage_name": "Orman",
+                    "stage_length_km": 10.0,
+                    "results": [
+                        {"driver_name": "Pilot A", "car_class": "K3", "time_str": "10:10:000"},
+                        {"driver_name": "Pilot B", "car_class": "K3", "time_str": "10:00:000"},
+                        {"driver_name": "Pilot C", "car_class": "S3", "time_str": "09:30:000"},
+                    ],
+                },
+                {
+                    "stage_number": 2,
+                    "stage_name": "Göl",
+                    "stage_length_km": 12.0,
+                    "results": [
+                        {"driver_name": "Pilot A", "car_class": "K3", "time_str": "12:24:000"},
+                        {"driver_name": "Pilot B", "car_class": "K3", "time_str": "12:00:000"},
+                    ],
+                },
+                {
+                    "stage_number": 3,
+                    "stage_name": "Tepe",
+                    "stage_length_km": 15.0,
+                    "results": [
+                        {"driver_name": "Pilot A", "car_class": "K3", "time_str": "DNF"},
+                        {"driver_name": "Pilot B", "car_class": "K3", "time_str": "15:00:000"},
+                        {"driver_name": "Pilot C", "car_class": "S3", "time_str": "14:20:000"},
+                    ],
+                },
+            ],
+        }
+
+        payload = build_manual_payload_from_rally(rally_data, "Pilot A", 3)
+
+        self.assertEqual(payload["class_name"], "K3")
+        self.assertEqual(len(payload["references"]), 2)
+        self.assertEqual(payload["references"][0]["best_time"], "10:00:000")
+        self.assertEqual(payload["references"][1]["driver_time"], "12:24:000")
+        self.assertEqual(payload["target"]["best_time"], "15:00:000")
+        self.assertEqual(payload["target"]["km"], 15.0)
+
+    def test_build_manual_payload_requires_same_class_target_best(self):
+        rally_data = {
+            "stages": [
+                {
+                    "stage_number": 1,
+                    "stage_length_km": 10.0,
+                    "results": [
+                        {"driver_name": "Pilot A", "car_class": "K3", "time_str": "10:10:000"},
+                    ],
+                },
+                {
+                    "stage_number": 2,
+                    "stage_length_km": 12.0,
+                    "results": [
+                        {"driver_name": "Pilot A", "car_class": "K3", "time_str": "DNF"},
+                        {"driver_name": "Pilot C", "car_class": "S3", "time_str": "11:00:000"},
+                    ],
+                },
+            ]
+        }
+
+        with self.assertRaisesRegex(ValueError, "K3 sınıfında geçerli best derece"):
+            build_manual_payload_from_rally(rally_data, "Pilot A", 2)
 
 
 if __name__ == "__main__":

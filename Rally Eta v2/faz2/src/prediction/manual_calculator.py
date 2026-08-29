@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 
 METHOD_GAP_WARNING_SECONDS = 5.0
@@ -40,6 +40,96 @@ class ManualCalculationResult:
     percentage_prediction_seconds: float
     methods_gap_seconds: float
     warnings: tuple[str, ...]
+
+
+def build_manual_payload_from_rally(
+    rally_data: Mapping[str, Any],
+    driver_name: str,
+    target_stage_number: int,
+    max_reference_stages: int = 6,
+) -> dict[str, Any]:
+    """Build manual-calculator inputs from scraped rally results.
+
+    Raw class names are matched exactly; no class normalization or general-best
+    fallback is applied. Only stages with a valid length, same-class best time,
+    and a valid time for the selected driver are used as references.
+    """
+    stages = sorted(
+        rally_data.get("stages") or [],
+        key=lambda stage: int(stage.get("stage_number") or 0),
+    )
+    target_stage = next(
+        (
+            stage
+            for stage in stages
+            if int(stage.get("stage_number") or 0) == int(target_stage_number)
+        ),
+        None,
+    )
+    if not target_stage:
+        raise ValueError(f"Hedef etap bulunamadı: SS{target_stage_number}")
+
+    class_name = _find_driver_raw_class(stages, driver_name, int(target_stage_number))
+    if not class_name:
+        raise ValueError(f"{driver_name} için ham sınıf bilgisi bulunamadı.")
+
+    target_km = _coerce_optional_km(target_stage.get("stage_length_km"))
+    if target_km is None:
+        raise ValueError(
+            f"SS{target_stage_number} etap uzunluğu URL verisinde bulunamadı. "
+            "Hedef etap kilometresini manuel girin."
+        )
+
+    target_best = _find_same_class_best_time(target_stage, class_name)
+    if not target_best:
+        raise ValueError(
+            f"SS{target_stage_number} için {class_name} sınıfında geçerli best derece henüz yok. "
+            "Sonuç sayfasında sınıftan en az bir finiş olmalı."
+        )
+
+    references: list[dict[str, Any]] = []
+    skipped_stages: list[str] = []
+    for stage in stages:
+        stage_number = int(stage.get("stage_number") or 0)
+        if stage_number >= int(target_stage_number):
+            continue
+
+        stage_km = _coerce_optional_km(stage.get("stage_length_km"))
+        best_time = _find_same_class_best_time(stage, class_name)
+        driver_time = _find_driver_time(stage, driver_name)
+        label = _stage_label(stage)
+        if stage_km is None or not best_time or not driver_time:
+            skipped_stages.append(label)
+            continue
+
+        references.append(
+            {
+                "label": label,
+                "km": stage_km,
+                "best_time": best_time,
+                "driver_time": driver_time,
+            }
+        )
+
+    references = references[-max(1, int(max_reference_stages)) :]
+    if not references:
+        raise ValueError(
+            f"{driver_name} için SS{target_stage_number} öncesinde hesapta kullanılabilecek "
+            f"tam {class_name} sınıfı referansı bulunamadı."
+        )
+
+    return {
+        "class_name": class_name,
+        "driver_name": driver_name,
+        "rally_name": str(rally_data.get("rally_name") or ""),
+        "references": references,
+        "target": {
+            "label": _stage_label(target_stage),
+            "km": target_km,
+            "best_time": target_best,
+        },
+        "skipped_stages": skipped_stages,
+    }
 
 
 def parse_manual_time_input(value: str) -> float:
@@ -215,6 +305,59 @@ def _has_reference_input(km: float | None, best_input: str, driver_input: str) -
     return bool((km and km > 0) or best_input or driver_input)
 
 
+def _find_driver_raw_class(
+    stages: Sequence[Mapping[str, Any]],
+    driver_name: str,
+    target_stage_number: int,
+) -> str:
+    eligible = [
+        stage
+        for stage in stages
+        if int(stage.get("stage_number") or 0) <= target_stage_number
+    ]
+    for stage in reversed(eligible):
+        for result in stage.get("results") or []:
+            if str(result.get("driver_name") or "").strip() != driver_name.strip():
+                continue
+            class_name = str(result.get("car_class") or "").strip()
+            if class_name:
+                return class_name
+    return ""
+
+
+def _find_same_class_best_time(stage: Mapping[str, Any], class_name: str) -> str:
+    candidates: list[tuple[float, str]] = []
+    for result in stage.get("results") or []:
+        if str(result.get("car_class") or "").strip() != class_name:
+            continue
+        time_input = str(result.get("time_str") or "").strip()
+        try:
+            seconds = parse_manual_time_input(time_input)
+        except ValueError:
+            continue
+        candidates.append((seconds, time_input))
+    return min(candidates, default=(0.0, ""), key=lambda item: item[0])[1]
+
+
+def _find_driver_time(stage: Mapping[str, Any], driver_name: str) -> str:
+    for result in stage.get("results") or []:
+        if str(result.get("driver_name") or "").strip() != driver_name.strip():
+            continue
+        time_input = str(result.get("time_str") or "").strip()
+        try:
+            parse_manual_time_input(time_input)
+        except ValueError:
+            return ""
+        return time_input
+    return ""
+
+
+def _stage_label(stage: Mapping[str, Any]) -> str:
+    stage_number = int(stage.get("stage_number") or 0)
+    stage_name = str(stage.get("stage_name") or "").strip()
+    return f"SS{stage_number}: {stage_name}" if stage_name else f"SS{stage_number}"
+
+
 def _coerce_optional_km(value: object) -> float | None:
     if value in (None, "", 0, 0.0):
         return None
@@ -261,4 +404,3 @@ def _ensure_positive(value: float, raw_value: str) -> float:
     if value <= 0:
         raise ValueError(f"Zaman 0'dan büyük olmalı: {raw_value}")
     return value
-

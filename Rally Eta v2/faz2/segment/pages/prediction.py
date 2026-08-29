@@ -36,6 +36,7 @@ if _src_path not in sys.path:
 
 from src.prediction.manual_calculator import (
     ManualCalculationResult,
+    build_manual_payload_from_rally,
     calculate_manual_stage_estimate,
     format_manual_time,
     parse_manual_time_input,
@@ -614,6 +615,8 @@ def _render_single_prediction():
         "ve genel best fallback uygulanmaz."
     )
 
+    _render_manual_url_import()
+
     class_name = st.text_input(
         "Sınıf",
         key="manual_calc_class",
@@ -633,7 +636,8 @@ def _render_single_prediction():
     reference_rows = []
     for index in range(1, MANUAL_REFERENCE_STAGE_COUNT + 1):
         row_cols = st.columns([1.0, 1.0, 1.2, 1.2])
-        row_cols[0].markdown(f"**Etap {index}**")
+        row_label = st.session_state.get(f"manual_ref_{index}_label", f"Etap {index}")
+        row_cols[0].markdown(f"**{row_label}**")
         km_value = row_cols[1].number_input(
             f"Etap {index} Km",
             min_value=0.0,
@@ -656,7 +660,7 @@ def _render_single_prediction():
         )
         reference_rows.append(
             {
-                "label": f"Etap {index}",
+                "label": row_label,
                 "km": km_value,
                 "best_time": best_time,
                 "driver_time": driver_time,
@@ -728,6 +732,149 @@ def _render_single_prediction():
 
     if stored_result:
         _render_manual_calculation_result(stored_result)
+
+
+def _render_manual_url_import():
+    """URL'den cekilen yaris verisiyle manuel hesap alanlarini doldur."""
+    with st.expander("Yarış URL'sinden Otomatik Doldur", expanded=True):
+        st.caption(
+            "TOSFED sonuç URL'sini girin; pilot, ham sınıf, önceki etaplar ve hedef etap besti otomatik eşleştirilsin."
+        )
+        url = st.text_input(
+            "TOSFED Sonuç URL'si",
+            placeholder="https://sonuc.tosfed.org.tr/yaris/171/ralli_etap_sonuclari/?etp=7",
+            key="manual_auto_url",
+        )
+
+        if st.button("Yarış Verisini Çek", key="manual_auto_fetch", use_container_width=True):
+            if not re.search(r"/yaris/\d+", url or ""):
+                st.error("Geçerli bir TOSFED yarış sonuç URL'si girin.")
+            else:
+                with st.spinner("Yarış ve etap sonuçları çekiliyor..."):
+                    try:
+                        if (
+                            st.session_state.get("live_rally_url") == url
+                            and st.session_state.get("live_rally_data")
+                        ):
+                            rally_data = st.session_state["live_rally_data"]
+                        else:
+                            from src.scraper.tosfed_sonuc_scraper import TOSFEDSonucScraper
+
+                            rally_data = TOSFEDSonucScraper().fetch_rally_from_url(url)
+                        if not rally_data:
+                            st.error("Yarış verisi alınamadı. URL'yi ve internet bağlantısını kontrol edin.")
+                        else:
+                            st.session_state["manual_auto_rally_data"] = rally_data
+                            st.session_state["manual_auto_loaded_url"] = url
+                            st.success(
+                                f"{rally_data.get('rally_name', 'Yarış')} yüklendi: "
+                                f"{len(rally_data.get('stages') or [])} etap"
+                            )
+                    except Exception as exc:
+                        st.error(f"Yarış verisi çekilemedi: {exc}")
+
+        rally_data = st.session_state.get("manual_auto_rally_data")
+        if not rally_data:
+            return
+
+        stages = sorted(
+            rally_data.get("stages") or [],
+            key=lambda stage: int(stage.get("stage_number") or 0),
+        )
+        drivers = sorted(
+            {
+                str(result.get("driver_name") or "").strip()
+                for stage in stages
+                for result in stage.get("results") or []
+                if str(result.get("driver_name") or "").strip()
+            }
+        )
+        if not stages or not drivers:
+            st.warning("Otomatik hesap için etap veya pilot verisi bulunamadı.")
+            return
+
+        stage_numbers = [int(stage.get("stage_number") or 0) for stage in stages]
+        suggested_stage = int(rally_data.get("suggested_stage") or stage_numbers[-1])
+        suggested_index = stage_numbers.index(suggested_stage) if suggested_stage in stage_numbers else len(stages) - 1
+
+        selector_cols = st.columns(2)
+        target_stage_number = selector_cols[0].selectbox(
+            "Hedef Etap",
+            stage_numbers,
+            index=suggested_index,
+            format_func=lambda number: next(
+                (
+                    f"SS{number}: {stage.get('stage_name', '')}"
+                    for stage in stages
+                    if int(stage.get("stage_number") or 0) == number
+                ),
+                f"SS{number}",
+            ),
+            key="manual_auto_target_stage",
+        )
+        driver_name = selector_cols[1].selectbox(
+            "Hesaplanacak Pilot",
+            drivers,
+            key="manual_auto_driver",
+        )
+
+        if st.button(
+            "Verileri Doldur ve Otomatik Hesapla",
+            type="primary",
+            key="manual_auto_calculate",
+            use_container_width=True,
+        ):
+            try:
+                payload = build_manual_payload_from_rally(
+                    rally_data=rally_data,
+                    driver_name=driver_name,
+                    target_stage_number=target_stage_number,
+                    max_reference_stages=MANUAL_REFERENCE_STAGE_COUNT,
+                )
+                _apply_manual_url_payload(payload)
+                calculation_payload = {
+                    "class_name": payload["class_name"],
+                    "references": payload["references"],
+                    "target": {
+                        "km": payload["target"]["km"],
+                        "best_time": payload["target"]["best_time"],
+                    },
+                }
+                result = calculate_manual_stage_estimate(
+                    reference_rows=calculation_payload["references"],
+                    target_row=calculation_payload["target"],
+                    class_name=calculation_payload["class_name"],
+                )
+                st.session_state["manual_calc_result"] = result
+                st.session_state["manual_calc_payload"] = calculation_payload
+                st.success(
+                    f"{driver_name} / {payload['target']['label']} otomatik hesaplandı. "
+                    f"{len(payload['references'])} referans etap kullanıldı."
+                )
+                if payload["skipped_stages"]:
+                    st.caption(
+                        "Eksik km, sınıf besti veya pilot süresi nedeniyle atlanan etaplar: "
+                        + ", ".join(payload["skipped_stages"])
+                    )
+            except ValueError as exc:
+                st.error(str(exc))
+
+
+def _apply_manual_url_payload(payload):
+    """Otomatik eslesen verileri manuel form widget anahtarlarina aktar."""
+    st.session_state["manual_calc_class"] = payload["class_name"]
+    references = payload["references"]
+    for index in range(1, MANUAL_REFERENCE_STAGE_COUNT + 1):
+        reference = references[index - 1] if index <= len(references) else None
+        st.session_state[f"manual_ref_{index}_label"] = (
+            reference["label"] if reference else f"Etap {index}"
+        )
+        st.session_state[f"manual_ref_{index}_km"] = float(reference["km"]) if reference else 0.0
+        st.session_state[f"manual_ref_{index}_best"] = reference["best_time"] if reference else ""
+        st.session_state[f"manual_ref_{index}_driver"] = reference["driver_time"] if reference else ""
+
+    st.session_state["manual_target_km"] = float(payload["target"]["km"])
+    st.session_state["manual_target_best"] = payload["target"]["best_time"]
 
 
 def _render_manual_calculation_result(result: ManualCalculationResult):
@@ -809,6 +956,7 @@ def _reset_manual_calculator_state():
         "manual_target_best": "",
     }
     for index in range(1, MANUAL_REFERENCE_STAGE_COUNT + 1):
+        defaults[f"manual_ref_{index}_label"] = f"Etap {index}"
         defaults[f"manual_ref_{index}_km"] = 0.0
         defaults[f"manual_ref_{index}_best"] = ""
         defaults[f"manual_ref_{index}_driver"] = ""
