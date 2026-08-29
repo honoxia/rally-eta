@@ -4,6 +4,7 @@ Veritabanı bağlantısı, tablo oluşturma ve durum kontrolü.
 """
 
 import sqlite3
+import streamlit as st
 import sys
 from pathlib import Path
 from typing import Optional
@@ -310,8 +311,13 @@ def ensure_all_tables(db_path: Optional[str] = None):
 
 
 def get_database_info(db_path: Optional[str] = None) -> dict:
-    """Database durumu ve istatistiklerini döndür."""
     path = db_path or get_db_path()
+    return _get_database_info_cached(path)
+
+
+@st.cache_data(ttl=10, show_spinner=False)
+def _get_database_info_cached(path: str) -> dict:
+    """Database durumu ve istatistiklerini kısa süreli önbellekle."""
 
     if not Path(path).exists():
         return {

@@ -21,9 +21,8 @@ from shared.db_helpers import get_database_info, ensure_all_tables
 from shared.data_loaders import get_kml_files
 from shared.ui_components import apply_custom_css, show_db_status_sidebar
 
-# Page modüllerini import et
-from pages import home, scraper, kml_manager, training, prediction, settings
 
+SCHEMA_RUNTIME_VERSION = 2
 
 # ========== PAGE CONFIG ==========
 st.set_page_config(
@@ -32,6 +31,14 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+
+@st.cache_resource(show_spinner=False)
+def initialize_runtime_schema(db_path: str, schema_version: int) -> bool:
+    """Run structural/data migrations once per process, DB path and version."""
+    del schema_version
+    ensure_all_tables(db_path)
+    return True
 
 # ========== INITIALIZATION ==========
 # Custom CSS
@@ -42,13 +49,12 @@ init_session_state()
 
 # Tabloları oluştur
 active_db_path = get_db_path()
-if st.session_state.get("_schema_ready_db") != active_db_path:
-    ensure_all_tables(active_db_path)
-    st.session_state["_schema_ready_db"] = active_db_path
+initialize_runtime_schema(active_db_path, SCHEMA_RUNTIME_VERSION)
 
 
 # ========== SIDEBAR ==========
 PAGE_META = {
+    "Operasyon Modu": "Yarış Günü Karar Akışı",
     "Ana Sayfa": "Kontrol Merkezi",
     "Veri Cek": "Veri Alim Merkezi",
     "KML Yonetimi": "Geometrik Veriler",
@@ -101,20 +107,37 @@ st.sidebar.markdown(
 
 
 # ========== PAGE ROUTING ==========
-if page == "Ana Sayfa":
+if page == "Operasyon Modu":
+    from pages import operations
+
+    operations.render()
+
+elif page == "Ana Sayfa":
+    from pages import home
+
     home.render()
 
 elif page == "Veri Cek":
+    from pages import scraper
+
     scraper.render()
 
 elif page == "KML Yonetimi":
+    from pages import kml_manager
+
     kml_manager.render()
 
 elif page == "Model Egitimi":
+    from pages import training
+
     training.render()
 
 elif page == "Tahmin Yap":
+    from pages import prediction
+
     prediction.render()
 
 elif page == "Ayarlar":
+    from pages import settings
+
     settings.render()

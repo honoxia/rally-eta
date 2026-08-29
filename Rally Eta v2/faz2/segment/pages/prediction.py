@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.config import get_db_path, get_model_dir, get_model_path, PROJECT_ROOT, SURFACE_TYPES
 from shared.db_helpers import get_database_info
 from shared.data_loaders import get_driver_list
+from shared.services import get_prediction_service
 from shared.ui_components import (
     render_page_header,
     render_stat_cards,
@@ -1302,12 +1303,8 @@ def _run_prediction(driver_id: str, driver_name: str, stage_length_km: float,
 
 
 def _get_prediction_service():
-    """Create the single predictor service used by all prediction screens."""
-    from src.prediction.prediction_service import PredictionService
-
-    model_path = get_model_path()
-    model_path_str = str(model_path) if model_path.exists() else None
-    return PredictionService(db_path=get_db_path(), model_path=model_path_str)
+    """Return the cached predictor service used by all prediction screens."""
+    return get_prediction_service()
 
 
 # =============================================================================

@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from src.baseline.driver_performance import DriverPerformanceAnalyzer
 from src.baseline.rally_momentum import RallyMomentumAnalyzer
-from src.data.master_schema import apply_master_schema, build_driver_id, build_stage_id, normalize_name_key, slugify
+from src.data.master_schema import build_driver_id, build_stage_id, normalize_name_key, slugify
 from src.prediction.notional_time_predictor import NotionalTimePredictor
 
 logger = logging.getLogger(__name__)
@@ -27,10 +27,10 @@ class PredictionService:
     def __init__(self, db_path: str, model_path: Optional[str] = None):
         self.db_path = db_path
         self.model_path = str(model_path) if model_path and Path(model_path).exists() else None
-        apply_master_schema(db_path)
+        self._model_data = None
+        self._model_data_loaded = False
 
-        self.predictor = NotionalTimePredictor(db_path=db_path, model_path=self.model_path)
-        self.manual_predictor = NotionalTimePredictor(db_path=db_path, model_path=None)
+        self._manual_predictor = None
 
         try:
             from src.data.car_class_normalizer import CarClassNormalizer
@@ -56,7 +56,7 @@ class PredictionService:
         driver = self.resolve_driver(driver_id=driver_id, driver_name=driver_name)
         resolved_stage_id = stage_id or build_stage_id(rally_id, stage_number) or f"{rally_id}_ss{stage_number}"
 
-        result = self.manual_predictor.predict_for_manual_input(
+        result = self._get_manual_predictor().predict_for_manual_input(
             driver_id=driver["driver_id"],
             driver_name=driver["driver_name"],
             stage_length_km=stage_length_km,
@@ -97,6 +97,12 @@ class PredictionService:
             )
 
         return prediction
+
+    def _get_manual_predictor(self) -> NotionalTimePredictor:
+        """Create the legacy manual predictor only when that flow is used."""
+        if self._manual_predictor is None:
+            self._manual_predictor = NotionalTimePredictor(db_path=self.db_path, model_path=None)
+        return self._manual_predictor
 
     def compare_previous_and_predict_next(
         self,
@@ -873,11 +879,10 @@ class PredictionService:
         if not self.model_path or not Path(self.model_path).exists():
             return 1.0, "baseline_only"
 
-        import pickle
-
         try:
-            with open(self.model_path, "rb") as handle:
-                model_data = pickle.load(handle)
+            model_data = self._get_model_data()
+            if not model_data:
+                return 1.0, "baseline_only"
             model = model_data["model"]
             feature_cols = model_data["feature_columns"]
             import pandas as pd
@@ -957,6 +962,21 @@ class PredictionService:
             return float(_clip(correction, 0.9, 1.1)), "geometric"
         except Exception as exc:
             return 1.0, f"baseline_only ({exc})"
+
+    def _get_model_data(self):
+        """Load the direct geometric model artifact once per service instance."""
+        if self._model_data_loaded:
+            return self._model_data
+
+        self._model_data_loaded = True
+        if not self.model_path or not Path(self.model_path).exists():
+            return None
+
+        import pickle
+
+        with open(self.model_path, "rb") as handle:
+            self._model_data = pickle.load(handle)
+        return self._model_data
 
     def _calculate_reference_time(
         self,

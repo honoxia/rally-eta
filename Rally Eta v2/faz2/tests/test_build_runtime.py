@@ -102,12 +102,15 @@ class BuildRuntimeTests(unittest.TestCase):
         prediction_source = Path("segment/pages/prediction.py").read_text(encoding="utf-8")
         app_source = Path("segment/app.py").read_text(encoding="utf-8")
         data_loader_source = Path("segment/shared/data_loaders.py").read_text(encoding="utf-8")
+        services_source = Path("segment/shared/services.py").read_text(encoding="utf-8")
 
         self.assertIn("predict_manual_stage", prediction_source)
         self.assertIn("predict_kml_stage", prediction_source)
         self.assertIn("compare_previous_and_predict_next", prediction_source)
-        self.assertIn("PredictionService", prediction_source)
-        self.assertIn("ensure_all_tables(active_db_path)", app_source)
+        self.assertIn("get_prediction_service", prediction_source)
+        self.assertIn("PredictionService", services_source)
+        self.assertIn("@st.cache_resource", services_source)
+        self.assertIn("initialize_runtime_schema(active_db_path", app_source)
         self.assertIn("FROM drivers d", data_loader_source)
 
 

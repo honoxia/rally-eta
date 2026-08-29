@@ -4,6 +4,7 @@ Pilot, ralli, KML ve metadata yükleme işlemleri.
 """
 
 import pandas as pd
+import streamlit as st
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional
@@ -21,8 +22,13 @@ def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
 
 
 def get_driver_list(db_path: Optional[str] = None) -> List[Dict]:
-    """Veritabanından pilot listesini yükle."""
     path = db_path or get_db_path()
+    return _get_driver_list_cached(path)
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def _get_driver_list_cached(path: str) -> List[Dict]:
+    """Veritabanından pilot listesini kısa süreli önbellekle."""
 
     if not Path(path).exists():
         return []
@@ -68,8 +74,13 @@ def get_driver_list(db_path: Optional[str] = None) -> List[Dict]:
 
 
 def get_rally_list(db_path: Optional[str] = None, limit: Optional[int] = None) -> List[Dict]:
-    """Veritabanından ralli listesini yükle."""
     path = db_path or get_db_path()
+    return _get_rally_list_cached(path, limit)
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def _get_rally_list_cached(path: str, limit: Optional[int]) -> List[Dict]:
+    """Veritabanından ralli listesini kısa süreli önbellekle."""
 
     if not Path(path).exists():
         return []
@@ -108,8 +119,13 @@ def get_rally_list(db_path: Optional[str] = None, limit: Optional[int] = None) -
 
 
 def get_stages_for_rally(rally_id: str, db_path: Optional[str] = None) -> pd.DataFrame:
-    """Belirli bir ralli için etap listesini yükle."""
     path = db_path or get_db_path()
+    return _get_stages_for_rally_cached(str(rally_id), path)
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def _get_stages_for_rally_cached(rally_id: str, path: str) -> pd.DataFrame:
+    """Belirli bir ralli için etap listesini kısa süreli önbellekle."""
 
     if not Path(path).exists():
         return pd.DataFrame()
@@ -150,8 +166,14 @@ def get_stages_for_rally(rally_id: str, db_path: Optional[str] = None) -> pd.Dat
 
 
 def get_kml_files(kml_folder: Optional[str] = None) -> List[Dict]:
-    """KML/KMZ dosya listesini yükle."""
     folder = Path(kml_folder or get_kml_folder())
+    return _get_kml_files_cached(str(folder))
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def _get_kml_files_cached(folder_path: str) -> List[Dict]:
+    """KML/KMZ dosya listesini kısa süreli önbellekle."""
+    folder = Path(folder_path)
 
     if not folder.exists():
         return []
@@ -175,8 +197,17 @@ def get_stage_metadata_df(
     db_path: Optional[str] = None,
     limit: Optional[int] = None,
 ) -> pd.DataFrame:
-    """Geometrik metadata'yı DataFrame olarak yükle (ML-optimized)."""
     path = db_path or get_db_path()
+    return _get_stage_metadata_df_cached(rally_id, path, limit)
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def _get_stage_metadata_df_cached(
+    rally_id: Optional[str],
+    path: str,
+    limit: Optional[int],
+) -> pd.DataFrame:
+    """Geometrik metadata'yı kısa süreli önbellekle."""
 
     if not Path(path).exists():
         return pd.DataFrame()
@@ -264,10 +295,22 @@ def get_stage_metadata_df(
 
 
 def get_model_status(db_path: Optional[str] = None, model_dir: Optional[str] = None) -> Dict:
-    """Model durumunu kontrol et."""
+    from .config import get_model_dir
+
+    path = db_path or get_db_path()
+    resolved_model_dir = model_dir or get_model_dir()
+    model_path = Path(resolved_model_dir) / "geometric_model_latest.pkl"
+    model_modified_ns = model_path.stat().st_mtime_ns if model_path.exists() else 0
+    return _get_model_status_cached(path, resolved_model_dir, model_modified_ns)
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def _get_model_status_cached(db_path: str, model_dir: str, model_modified_ns: int) -> Dict:
+    """Model durumunu ve metriklerini kısa süreli önbellekle."""
+    del model_modified_ns
     try:
         import sys
-        from .config import PROJECT_ROOT, get_model_dir
+        from .config import PROJECT_ROOT
 
         # src klasörünü path'e ekle
         src_path = str(PROJECT_ROOT)
@@ -277,8 +320,8 @@ def get_model_status(db_path: Optional[str] = None, model_dir: Optional[str] = N
         from src.ml.model_trainer import ModelTrainer
 
         trainer = ModelTrainer(
-            db_path=db_path or get_db_path(),
-            model_dir=model_dir or get_model_dir()
+            db_path=db_path,
+            model_dir=model_dir,
         )
         return trainer.get_training_status()
     except Exception as e:
