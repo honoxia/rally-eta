@@ -9,6 +9,14 @@ from typing import Any, Mapping, Sequence
 METHOD_GAP_WARNING_SECONDS = 5.0
 TIME_FORMAT_EXAMPLE = "01:10:800"
 
+# Aykiri referans elemesi: lastik/ariza yasanan bir referans etap, 6 etaplik
+# ortalamayi tek basina bozuyor. Medyan + MAD ile sapan etaplari eliyoruz.
+OUTLIER_MIN_REFERENCES = 4  # bu sayinin altinda eleme yapilmaz
+OUTLIER_MIN_KEPT = 3  # elemeden sonra en az bu kadar referans kalmali
+OUTLIER_MAD_MULTIPLIER = 3.0
+OUTLIER_RELATIVE_FLOOR = 0.10  # medyanin %10'u icindeki sapmalar hic elenmez
+_MAD_NORMAL_SCALE = 1.4826
+
 
 @dataclass(frozen=True)
 class ManualReferenceStageResult:
@@ -268,6 +276,9 @@ def calculate_manual_stage_estimate(
     if not reference_details:
         raise ValueError("Hesap için en az 1 tam referans etap gerekli.")
 
+    reference_details, outlier_notes = _drop_reference_outliers(reference_details)
+    ignored_references.extend(outlier_notes)
+
     used_stage_count = len(reference_details)
     average_diff_per_km = sum(item.diff_per_km for item in reference_details) / used_stage_count
     average_ratio = sum(item.ratio for item in reference_details) / used_stage_count
@@ -277,6 +288,11 @@ def calculate_manual_stage_estimate(
     methods_gap_seconds = abs(km_based_prediction_seconds - percentage_prediction_seconds)
 
     warnings: list[str] = []
+    if outlier_notes:
+        warnings.append(
+            f"{len(outlier_notes)} referans etap, pilotun kendi normalinden belirgin saptığı için "
+            "hesaba katılmadı (olası lastik/arıza). Ayrıntı için atlanan satırlara bakın."
+        )
     if used_stage_count == 1:
         warnings.append("Sadece 1 etap kullanıldı; sonuç düşük güven seviyesinde değerlendirilmeli.")
     if methods_gap_seconds >= METHOD_GAP_WARNING_SECONDS:
@@ -299,6 +315,56 @@ def calculate_manual_stage_estimate(
         methods_gap_seconds=methods_gap_seconds,
         warnings=tuple(warnings),
     )
+
+
+def _drop_reference_outliers(
+    reference_details: Sequence[ManualReferenceStageResult],
+) -> tuple[list[ManualReferenceStageResult], list[str]]:
+    """Drop reference stages where the driver deviates from their own norm.
+
+    Uses the class-best ratio, which is comparable across stage lengths. The
+    spread is measured with median absolute deviation so a single bad stage
+    cannot widen the threshold that is supposed to catch it. A relative floor
+    keeps consistent drivers from having ordinary stages eliminated, and at
+    least OUTLIER_MIN_KEPT references always survive.
+    """
+    details = list(reference_details)
+    if len(details) < OUTLIER_MIN_REFERENCES:
+        return details, []
+
+    ratios = [item.ratio for item in details]
+    median_ratio = _median(ratios)
+    scaled_mad = _median([abs(ratio - median_ratio) for ratio in ratios]) * _MAD_NORMAL_SCALE
+    threshold = max(OUTLIER_MAD_MULTIPLIER * scaled_mad, OUTLIER_RELATIVE_FLOOR * median_ratio)
+
+    flagged = [item for item in details if abs(item.ratio - median_ratio) > threshold]
+    if not flagged:
+        return details, []
+
+    # En cok sapandan basla, ama en az OUTLIER_MIN_KEPT referans birak.
+    flagged.sort(key=lambda item: abs(item.ratio - median_ratio), reverse=True)
+    droppable = min(len(flagged), len(details) - OUTLIER_MIN_KEPT)
+    if droppable <= 0:
+        return details, []
+
+    dropped = set(id(item) for item in flagged[:droppable])
+    kept = [item for item in details if id(item) not in dropped]
+    notes = [
+        f"{item.label}: pilotun referans normalinden sapıyor "
+        f"(oran {item.ratio:.3f}, medyan {median_ratio:.3f}); hesaba katılmadı."
+        for item in details
+        if id(item) in dropped
+    ]
+    return kept, notes
+
+
+def _median(values: Sequence[float]) -> float:
+    ordered = sorted(values)
+    count = len(ordered)
+    middle = count // 2
+    if count % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2
 
 
 def _has_reference_input(km: float | None, best_input: str, driver_input: str) -> bool:

@@ -327,9 +327,16 @@ def _render_method_results(calculation) -> dict:
     for error in calculation.get("errors") or []:
         st.warning(error)
 
+    if manual_result:
+        for warning in manual_result.warnings:
+            st.warning(warning)
+
     payload = calculation.get("manual_payload")
     if payload:
         with st.expander("Kullanılan Referans Etaplar", expanded=False):
+            used_labels = (
+                {item.label for item in manual_result.reference_details} if manual_result else None
+            )
             show_html_table(
                 pd.DataFrame(
                     [
@@ -338,11 +345,16 @@ def _render_method_results(calculation) -> dict:
                             "Km": row["km"],
                             "Sınıf Best": row["best_time"],
                             "Pilot Süresi": row["driver_time"],
+                            "Durum": "Kullanıldı"
+                            if used_labels is None or row["label"] in used_labels
+                            else "Elendi",
                         }
                         for row in payload["references"]
                     ]
                 )
             )
+            if manual_result and manual_result.ignored_references:
+                st.caption("Hesaba katılmayanlar: " + " | ".join(manual_result.ignored_references))
             if payload.get("skipped_stages"):
                 st.caption("Eksik veri nedeniyle atlananlar: " + ", ".join(payload["skipped_stages"]))
 
