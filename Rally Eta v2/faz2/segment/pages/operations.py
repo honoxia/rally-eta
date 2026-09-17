@@ -140,7 +140,7 @@ def render():
 
     calculation = st.session_state.get("operation_calculation")
     if not calculation:
-        st.info("Km bazlı, yüzde bazlı ve ML sonuçlarını üretmek için hesaplamayı başlatın.")
+        st.info("Km bazlı, yüzde bazlı ve model/baz tahmin sonuçları için hesaplamayı başlatın.")
         return
     if calculation.get("signature") != current_signature:
         st.warning("Hedef etap, pilot veya zemin değişti. Sonuçları yeniden hesaplayın.")
@@ -205,12 +205,9 @@ def _fetch_rally(url: str) -> None:
 
     with st.spinner("Yarış ve etap sonuçları çekiliyor..."):
         try:
-            if st.session_state.get("live_rally_url") == url and st.session_state.get("live_rally_data"):
-                rally_data = st.session_state["live_rally_data"]
-            else:
-                from src.scraper.tosfed_sonuc_scraper import TOSFEDSonucScraper
+            from src.scraper.tosfed_sonuc_scraper import TOSFEDSonucScraper
 
-                rally_data = TOSFEDSonucScraper().fetch_rally_from_url(url)
+            rally_data = TOSFEDSonucScraper().fetch_rally_from_url(url)
             if not rally_data:
                 st.error("Yarış verisi alınamadı. URL'yi ve internet bağlantısını kontrol edin.")
                 return
@@ -275,9 +272,13 @@ def _calculate_methods(
             geo_features=None,
         )
         calculation["ml_result"] = ml_result
-        calculation["ml_seconds"] = float(ml_result["predicted_time_seconds"])
+        calculation["ml_seconds"] = (
+            float(ml_result["predicted_time_seconds"])
+            if ml_result.get("geometric_mode") == "geometric"
+            else None
+        )
     except Exception as exc:
-        calculation["errors"].append(f"ML yöntemi: {exc}")
+        calculation["errors"].append(f"Model/baz tahmin: {exc}")
 
     if not calculation.get("manual_result") and not calculation.get("ml_result"):
         st.error("Hiçbir yöntem sonuç üretemedi.")
@@ -312,17 +313,24 @@ def _render_method_results(calculation) -> dict:
 
     ml_result = calculation.get("ml_result")
     if ml_result:
-        methods["ML Tahmini"] = {
+        uses_ml = ml_result.get("geometric_mode") == "geometric"
+        method_label = "ML Tahmini" if uses_ml else "Baz Tahmin"
+        methods[method_label] = {
             "seconds": float(ml_result["predicted_time_seconds"]),
             "time_str": ml_result["predicted_time_str"],
         }
-        cards[2].metric("ML Tahmini", ml_result["predicted_time_str"])
+        cards[2].metric(method_label, ml_result["predicted_time_str"])
         cards[2].caption(
             f"Güven {format_confidence_label(ml_result.get('confidence_level', 'MEDIUM'))} · "
             f"oran {float(ml_result.get('predicted_ratio') or 0):.3f}"
         )
+        if not uses_ml:
+            st.warning(
+                "ML modeli kullanılmadı. Baz Tahmin, pilot geçmişi, yarış içi performans "
+                "ve zemin verisine dayanır; karar kaydına bu adla yazılır."
+            )
     else:
-        cards[2].metric("ML Tahmini", "Kullanılamadı")
+        cards[2].metric("Model/Baz Tahmin", "Kullanılamadı")
 
     for error in calculation.get("errors") or []:
         st.warning(error)

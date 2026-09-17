@@ -699,7 +699,11 @@ def _render_single_prediction():
 
     current_payload = {
         "class_name": class_name,
-        "references": reference_rows,
+        # URL imports contain only populated rows; ignore empty form slots too.
+        "references": [
+            row for row in reference_rows
+            if row["km"] or row["best_time"] or row["driver_time"]
+        ],
         "target": {
             "km": target_km,
             "best_time": target_best,
@@ -753,15 +757,9 @@ def _render_manual_url_import():
             else:
                 with st.spinner("Yarış ve etap sonuçları çekiliyor..."):
                     try:
-                        if (
-                            st.session_state.get("live_rally_url") == url
-                            and st.session_state.get("live_rally_data")
-                        ):
-                            rally_data = st.session_state["live_rally_data"]
-                        else:
-                            from src.scraper.tosfed_sonuc_scraper import TOSFEDSonucScraper
+                        from src.scraper.tosfed_sonuc_scraper import TOSFEDSonucScraper
 
-                            rally_data = TOSFEDSonucScraper().fetch_rally_from_url(url)
+                        rally_data = TOSFEDSonucScraper().fetch_rally_from_url(url)
                         if not rally_data:
                             st.error("Yarış verisi alınamadı. URL'yi ve internet bağlantısını kontrol edin.")
                         else:
@@ -850,7 +848,7 @@ def _render_manual_url_import():
                 st.session_state["manual_calc_payload"] = calculation_payload
                 st.success(
                     f"{driver_name} / {payload['target']['label']} otomatik hesaplandı. "
-                    f"{len(payload['references'])} referans etap kullanıldı."
+                    f"{result.used_stage_count} referans etap kullanıldı."
                 )
                 if payload["skipped_stages"]:
                     st.caption(
