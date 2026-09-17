@@ -1,6 +1,5 @@
-import importlib.util
+import ast
 import sys
-import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -69,34 +68,30 @@ class BuildRuntimeTests(unittest.TestCase):
         self.assertIn('app_path = get_resource_path("app.py")', launcher_source)
         self.assertIn('sys.path.insert(0, str(base_path / "segment"))', launcher_source)
 
-    def test_root_app_delegates_to_segment_router(self):
-        module_name = f"tmp_root_app_{next(tempfile._get_candidate_names())}"
-        app_path = Path("app.py")
-        spec = importlib.util.spec_from_file_location(module_name, app_path)
-        module = importlib.util.module_from_spec(spec)
-        original_segment_pkg = sys.modules.get("segment")
-        original_segment = sys.modules.get("segment.app")
-        segment_app_stub = types.SimpleNamespace(BUILD_SURFACE_SENTINEL="segment-router")
-        segment_pkg = types.ModuleType("segment")
-        segment_pkg.app = segment_app_stub
-        segment_pkg.__path__ = []
-        sys.modules["segment"] = segment_pkg
-        sys.modules["segment.app"] = segment_app_stub
+    def test_root_entrypoints_reexecute_router_on_every_rerun(self):
+        """Giris noktalari router'i import etmemeli, her rerun'da calistirmali.
 
-        try:
-            spec.loader.exec_module(module)
-        finally:
-            if original_segment_pkg is None:
-                sys.modules.pop("segment", None)
-            else:
-                sys.modules["segment"] = original_segment_pkg
-            if original_segment is None:
-                sys.modules.pop("segment.app", None)
-            else:
-                sys.modules["segment.app"] = original_segment
-            sys.modules.pop(module_name, None)
+        Streamlit bu dosyalari her etkilesimde yeniden calistiriyor ama
+        segment.app sys.modules'ta kaldigi icin ikinci import no-op oluyor ve
+        sayfa bombos geliyordu. runpy her seferinde dosyayi bastan calistirir.
+        """
+        for entry in ("app.py", "streamlit_app.py"):
+            with self.subTest(entry=entry):
+                source = Path(entry).read_text(encoding="utf-8")
 
-        self.assertEqual(module.BUILD_SURFACE_SENTINEL, "segment-router")
+                self.assertIn("import runpy", source)
+                self.assertIn('runpy.run_path(str(ROUTER_PATH), run_name="__main__")', source)
+                self.assertIn('ROUTER_PATH = SEGMENT_ROOT / "app.py"', source)
+
+                # Statik import geri gelirse sayfa yine ilk tiklamada bosalir.
+                # Docstring'lere degil, gercek import ifadelerine bakiyoruz.
+                imported = set()
+                for node in ast.walk(ast.parse(source)):
+                    if isinstance(node, ast.Import):
+                        imported.update(alias.name for alias in node.names)
+                    elif isinstance(node, ast.ImportFrom):
+                        imported.add(node.module or "")
+                self.assertNotIn("segment.app", imported)
 
     def test_segment_prediction_page_uses_prediction_service(self):
         prediction_source = Path("segment/pages/prediction.py").read_text(encoding="utf-8")
