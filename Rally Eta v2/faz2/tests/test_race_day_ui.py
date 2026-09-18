@@ -11,6 +11,7 @@ from streamlit.testing.v1 import AppTest
 
 from src.data.master_schema import apply_master_schema
 from src.prediction.prediction_service import PredictionService
+from src.scraper.tosfed_sonuc_scraper import ResultsNotPublishedError
 
 
 URL = "https://sonuc.tosfed.org.tr/yaris/171/"
@@ -47,7 +48,7 @@ class RaceDayUITests(unittest.TestCase):
 
     def test_explicit_refresh_reads_source_on_both_screens(self):
         for module, render, key, data_key in (
-            ("operations", "render", "operation_fetch", "operation_rally_data"),
+            ("operations", "render_decision", "operation_fetch", "operation_rally_data"),
             ("prediction", "_render_single_prediction", "manual_auto_fetch", "manual_auto_rally_data"),
         ):
             with self.subTest(screen=module):
@@ -69,7 +70,7 @@ class RaceDayUITests(unittest.TestCase):
 
     def test_failed_refresh_is_not_reported_as_success_from_cached_data(self):
         for module, render, key in (
-            ("operations", "render", "operation_fetch"),
+            ("operations", "render_decision", "operation_fetch"),
             ("prediction", "_render_single_prediction", "manual_auto_fetch"),
         ):
             with self.subTest(screen=module):
@@ -103,6 +104,26 @@ class RaceDayUITests(unittest.TestCase):
                 app.run()
                 self.assertTrue(any("Km Bazlı" in item.value for item in app.markdown))
 
+    def test_unpublished_results_show_information_instead_of_connection_error(self):
+        for module, render, key in (
+            ("operations", "render_decision", "operation_fetch"),
+            ("prediction", "_render_single_prediction", "manual_auto_fetch"),
+            ("prediction", "_render_live_prediction", "fetch_tosfed"),
+        ):
+            with self.subTest(screen=render):
+                app = AppTest.from_string(f"from pages.{module} import {render}\n{render}()")
+                app.run()
+                self.assert_healthy(app)
+                app.text_input[0].set_value(URL).run()
+                with patch(
+                    "src.scraper.tosfed_sonuc_scraper.TOSFEDSonucScraper.fetch_rally_from_url",
+                    side_effect=ResultsNotPublishedError("Etap finiş dereceleri henüz yayımlanmamış."),
+                ):
+                    app.button(key=key).click().run()
+                self.assert_healthy(app)
+                self.assertFalse(app.error)
+                self.assertTrue(any("henüz yayımlanmamış" in item.value for item in app.info))
+
     def test_editing_an_empty_reference_after_auto_calculation_invalidates_result(self):
         app = AppTest.from_string(
             "from pages.prediction import _render_single_prediction\n_render_single_prediction()"
@@ -130,7 +151,7 @@ class RaceDayUITests(unittest.TestCase):
                         "predicted_time_str": "10:15:000",
                         "confidence_level": "MEDIUM",
                     }
-                app = AppTest.from_string("from pages.operations import render\nrender()")
+                app = AppTest.from_string("from pages.operations import render_decision\nrender_decision()")
                 app.session_state["db_path"] = db_path
                 app.session_state["operation_rally_data"] = rally_fixture()
                 app.session_state["operation_loaded_url"] = URL

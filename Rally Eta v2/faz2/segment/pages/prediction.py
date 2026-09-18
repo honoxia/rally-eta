@@ -19,6 +19,7 @@ from shared.config import get_db_path, get_model_dir, get_model_path, PROJECT_RO
 from shared.db_helpers import get_database_info
 from shared.data_loaders import get_driver_list
 from shared.services import get_prediction_service
+from src.scraper.tosfed_sonuc_scraper import ResultsNotPublishedError
 from shared.ui_components import (
     render_page_header,
     render_stat_cards,
@@ -200,6 +201,9 @@ def _render_live_prediction():
 
                 st.success(f"Basarili! {rally_data['rally_name']} - {len(rally_data['stages'])} etap bulundu")
 
+            except ResultsNotPublishedError as exc:
+                st.info(str(exc))
+                return
             except Exception as e:
                 st.error(f"Veri cekme hatasi: {e}")
                 return
@@ -769,6 +773,8 @@ def _render_manual_url_import():
                                 f"{rally_data.get('rally_name', 'Yarış')} yüklendi: "
                                 f"{len(rally_data.get('stages') or [])} etap"
                             )
+                    except ResultsNotPublishedError as exc:
+                        st.info(str(exc))
                     except Exception as exc:
                         st.error(f"Yarış verisi çekilemedi: {exc}")
 

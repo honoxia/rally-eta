@@ -21,12 +21,23 @@ from src.prediction.manual_calculator import (
     format_manual_time,
 )
 from src.prediction.operation_decision import save_operation_decision
+from src.scraper.tosfed_sonuc_scraper import ResultsNotPublishedError
 
 
 MAX_REFERENCE_STAGES = 6
 
 
 def render():
+    view = st.radio('Görünüm', ['Canlı Yarış', 'Tek Pilot / Karar'], horizontal=True, key='operation_view')
+    if view == 'Canlı Yarış':
+        from pages import live_rally
+
+        live_rally.render()
+    else:
+        render_decision()
+
+
+def render_decision():
     """Render URL-to-decision race-day workflow."""
     render_page_header(
         "Operasyon Modu",
@@ -215,6 +226,8 @@ def _fetch_rally(url: str) -> None:
             st.session_state["operation_loaded_url"] = url
             st.session_state.pop("operation_calculation", None)
             st.success(f"{rally_data.get('rally_name', 'Yarış')} başarıyla yüklendi.")
+        except ResultsNotPublishedError as exc:
+            st.info(str(exc))
         except Exception as exc:
             st.error(f"Yarış verisi çekilemedi: {exc}")
 
