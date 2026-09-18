@@ -198,6 +198,30 @@ def ensure_results_master_tables(conn: sqlite3.Connection) -> None:
             comparison_status TEXT DEFAULT 'pending'
         );
 
+        CREATE TABLE IF NOT EXISTS operation_decisions (
+            decision_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rally_id TEXT NOT NULL,
+            rally_name TEXT,
+            stage_id TEXT NOT NULL,
+            stage_number INTEGER,
+            stage_name TEXT,
+            driver_name TEXT NOT NULL,
+            raw_class TEXT,
+            selected_method TEXT NOT NULL,
+            selected_time_seconds REAL NOT NULL,
+            selected_time_str TEXT NOT NULL,
+            km_based_seconds REAL,
+            percentage_seconds REAL,
+            ml_seconds REAL,
+            reference_stage_count INTEGER DEFAULT 0,
+            rationale TEXT NOT NULL,
+            source_url TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_operation_decisions_rally_stage
+            ON operation_decisions(rally_id, stage_id);
+
         CREATE TABLE IF NOT EXISTS merge_conflicts (
             conflict_id INTEGER PRIMARY KEY AUTOINCREMENT,
             entity_type TEXT NOT NULL,
@@ -280,6 +304,22 @@ def ensure_stage_results_columns(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_stage_results_driver_id ON stage_results(driver_id)"
     )
+    columns = get_table_columns(conn, "stage_results")
+    if {"driver_id", "rally_id", "stage_number"}.issubset(columns):
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_stage_results_driver_rally_stage
+            ON stage_results(driver_id, rally_id, stage_number)"""
+        )
+    if {"driver_id", "surface"}.issubset(columns):
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_stage_results_driver_surface
+            ON stage_results(driver_id, surface)"""
+        )
+    if {"stage_id", "normalized_class", "time_seconds"}.issubset(columns):
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_stage_results_stage_class_time
+            ON stage_results(stage_id, normalized_class, time_seconds)"""
+        )
 
 
 def ensure_stage_geometry_table(conn: sqlite3.Connection) -> None:

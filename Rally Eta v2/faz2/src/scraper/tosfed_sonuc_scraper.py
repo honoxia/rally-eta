@@ -8,13 +8,22 @@ import time
 import json
 import os
 import pandas as pd
+from urllib.parse import urlparse, urljoin
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
+
+
+class ResultsNotPublishedError(ValueError):
+    """The rally page is reachable, but no stage results are published yet."""
+
 
 class TOSFEDSonucScraper:
     """Scraper for TOSFED rally results"""
 
     BASE_URLS = [
+        "https://www.tosfedsonuc.org.tr",
+        "https://tosfedsonuc.org.tr",
         "https://sonuc.tosfed.org.tr",
         "https://tosfedsonuc.com",
     ]
@@ -27,6 +36,8 @@ class TOSFEDSonucScraper:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
         self.surface_metadata = self._load_surface_metadata()
+        self.results_unavailable_message = None
+        self._empty_stage_seen = False
 
     def _load_surface_metadata(self) -> Dict:
         """Load rally surface metadata from JSON"""
@@ -52,13 +63,19 @@ class TOSFEDSonucScraper:
                 
         return self.surface_metadata.get("default_surface", "gravel")
 
-    def fetch_rally_stages(self, rally_id: int) -> Optional[Dict]:
+    def fetch_rally_stages(self, rally_id: int, preferred_host: Optional[str] = None) -> Optional[Dict]:
         """Fetch all stage results for a rally using robust URL iteration"""
+        self.results_unavailable_message = None
+        self._empty_stage_seen = False
         
         # 1. Get Rally Info (Name, Date, etc.) from the main page
         base_url = None
         soup = None
-        for host in self.BASE_URLS:
+        hosts = list(self.BASE_URLS)
+        if preferred_host in hosts:
+            hosts.remove(preferred_host)
+            hosts.insert(0, preferred_host)
+        for host in hosts:
             for path in ["ralli_etap_sonuclari_print", "ralli_etap_sonuclari"]:
                 candidate = f"{host}/yaris/{rally_id}/{path}/"
                 logger.info(f"Fetching rally {rally_id} info from {candidate}")
@@ -67,6 +84,14 @@ class TOSFEDSonucScraper:
                     if response.status_code != 200:
                         continue
                     soup = BeautifulSoup(response.content, 'html.parser')
+                    if "yarış henüz başlamadı" in soup.get_text(" ", strip=True).lower():
+                        self.results_unavailable_message = (
+                            "TOSFED sayfasına ulaşıldı. Yarış henüz başlamadı; "
+                            "etap dereceleri yayımlandığında yeniden veri çekin."
+                        )
+                        return None
+                    if not self._is_rally_category(self._extract_rally_name(soup), soup):
+                        continue
                     base_url = candidate
                     break
                 except requests.RequestException:
@@ -123,6 +148,12 @@ class TOSFEDSonucScraper:
             
             if not stages:
                 logger.warning(f"  No stages found for rally {rally_id}")
+                if self._empty_stage_seen:
+                    self.results_unavailable_message = (
+                        f"{rally_name}: TOSFED sayfasına ulaşıldı, ancak etap finiş dereceleri "
+                        "henüz yayımlanmamış. Sıradaki araçlar sonuç sayılmaz. "
+                        "Dereceler yayımlandığında yeniden veri çekin."
+                    )
                 return None
                 
             return {
@@ -152,8 +183,14 @@ class TOSFEDSonucScraper:
             stage_data = self._parse_stage_table(table)
             
             if stage_data and stage_data.get('results'):
+                if stage_data['stage_number'] not in (0, stage_number):
+                    return None
                 stage_data['stage_number'] = stage_number
                 return stage_data
+            if not table.select('tbody tr') and re.search(
+                r'(?:ÖE|SS)\s*-?\s*\d+', table.get_text(' ', strip=True), re.IGNORECASE
+            ):
+                self._empty_stage_seen = True
                 
             return None
             
@@ -164,6 +201,22 @@ class TOSFEDSonucScraper:
     def _select_results_table(self, soup: BeautifulSoup):
         """Select the most likely results table from the page."""
         tables = soup.find_all('table')
+        if not tables:
+            return None
+
+        # Stage results take precedence even when empty. A larger queue or
+        # overall-classification table must never become stage timing data.
+        for table in tables:
+            header = table.find('tr')
+            if header and re.search(r'(?:ÖE|SS)\s*-?\s*\d+', header.get_text(' ', strip=True), re.IGNORECASE):
+                return table
+        tables = [
+            table for table in tables
+            if not re.search(
+                r'sıradaki araçlar|genel klasman|overall classification',
+                table.get_text(' ', strip=True), re.IGNORECASE,
+            )
+        ]
         if not tables:
             return None
 
@@ -181,6 +234,13 @@ class TOSFEDSonucScraper:
 
     def _extract_rally_name(self, soup: BeautifulSoup) -> str:
         """Extract rally name from page"""
+        for item in soup.select('ul.text-center > li'):
+            name = item.get_text(' ', strip=True)
+            if re.search(r'rallisi|rally', name, re.IGNORECASE):
+                return name
+        page_title = soup.find('title')
+        if page_title and re.search(r'ralli|rally', page_title.get_text(), re.IGNORECASE):
+            return page_title.get_text(' ', strip=True)
         title_tag = soup.find('h1') or soup.find('h2')
         if title_tag:
             return title_tag.text.strip()
@@ -236,7 +296,7 @@ class TOSFEDSonucScraper:
                         continue
         return max_stage
 
-    def _parse_stage_table(self, table) -> Optional[Dict]:
+    def _parse_stage_table(self, table, allow_empty: bool = False) -> Optional[Dict]:
         """Parse a single stage results table"""
         try:
             stage_name = "Unknown Stage"
@@ -281,7 +341,7 @@ class TOSFEDSonucScraper:
                 if result:
                     results.append(result)
 
-            if not results:
+            if not results and not allow_empty:
                 return None
 
             return {
@@ -302,7 +362,7 @@ class TOSFEDSonucScraper:
         stage_length = 0.0
 
         # Extract stage number (ÖE1, SS1, etc.)
-        stage_num_match = re.search(r'(?:ÖE|SS)\s*(\d+)', header_text, re.IGNORECASE)
+        stage_num_match = re.search(r'(?:ÖE|SS)\s*-?\s*(\d+)', header_text, re.IGNORECASE)
         if stage_num_match:
             stage_number = int(stage_num_match.group(1))
 
@@ -364,6 +424,122 @@ class TOSFEDSonucScraper:
             logger.warning(f"Error parsing result row: {e}")
             return None
 
+    def fetch_live_snapshot(self, url: str) -> Dict:
+        """Read the whole rally, including scheduled stages and waiting entrants.
+
+        Unlike the historical importer, this must not stop after three empty
+        stages: later stages may already contain results after cancellations.
+        A failed request rejects the snapshot so callers can retain the last one.
+        """
+        parsed = urlparse(url)
+        match = re.fullmatch(r'/yaris/(\d+)(?:/.*)?', parsed.path)
+        host = f'https://{parsed.hostname}'
+        if not match or host not in self.BASE_URLS:
+            raise ValueError('Geçerli bir TOSFED yarış sonuç URL’si girin.')
+        rally_id = int(match.group(1))
+        base_url = f'{host}/yaris/{rally_id}/ralli_etap_sonuclari/'
+        response = self.session.get(base_url, timeout=15)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
+        rally_name = self._extract_rally_name(soup)
+        if not self._is_rally_category(rally_name, soup):
+            raise ValueError('Bu sayfada ralli bilgisi bulunamadı.')
+        snapshot = {
+            'rally_id': rally_id, 'rally_name': rally_name,
+            'surface': self._determine_surface(rally_name),
+            'stages': [], 'entrants': [],
+        }
+        startlist_urls = sorted({
+            urljoin(base_url, link['href']) for link in soup.find_all('a', href=True)
+            if re.fullmatch(rf'/yaris/{rally_id}/\d+/startlist_ralli_gun\d+_print/', link['href'])
+        })
+        entrants_by_name = {}
+        for startlist_url in startlist_urls:
+            try:
+                start_response = self.session.get(startlist_url, timeout=15)
+                start_response.raise_for_status()
+                from src.neticeler.startlist_parser import StartlistParser
+
+                parser = StartlistParser()
+                try:
+                    starters = parser._parse_startlist_table(BeautifulSoup(start_response.content, 'html.parser'))
+                finally:
+                    parser.session.close()
+                for entrant in starters:
+                    if entrant.get('driver_name'):
+                        entrants_by_name[entrant['driver_name']] = {
+                            key: entrant.get(key, '') for key in ('driver_name', 'car_number', 'car_class')
+                        }
+            except requests.RequestException:
+                logger.warning('Start list could not be refreshed: %s', startlist_url)
+        if not entrants_by_name:
+            snapshot['roster_warning'] = (
+                'Tam start listesi henüz alınamadı. Şimdilik sonuçlarda ve sıradaki araçlar '
+                'listesinde görünen pilotlar gösteriliyor; tam liste geldiğinde otomatik eklenecek.'
+            )
+        if 'yarış henüz başlamadı' in soup.get_text(' ', strip=True).lower():
+            return snapshot
+
+        first_stage, first_entrants = self._parse_live_page(soup)
+        stage_numbers = sorted({
+            int(button['id'][2:]) for button in soup.find_all('a', id=re.compile(r'^et\d+$'))
+        })
+        if first_stage and first_stage['stage_number'] not in stage_numbers:
+            stage_numbers.append(first_stage['stage_number'])
+            stage_numbers.sort()
+        if not stage_numbers:
+            raise ValueError('TOSFED sayfasındaki etap listesi okunamadı.')
+
+        def fetch_stage(number):
+            if first_stage and first_stage['stage_number'] == number:
+                return first_stage, first_entrants
+            # Separate connections keep concurrent requests independent.
+            response = requests.get(
+                f'{base_url}?etp={number}', headers=dict(self.session.headers), timeout=15,
+            )
+            response.raise_for_status()
+            stage, entrants = self._parse_live_page(BeautifulSoup(response.content, 'html.parser'))
+            if not stage or stage['stage_number'] != number:
+                # Unstarted stages can redirect to the first stage. Never copy
+                # that first stage's times into the requested stage.
+                stage = {'stage_number': number, 'stage_name': f'SS{number}',
+                         'stage_length_km': 0.0, 'results': []}
+            return stage, entrants
+
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            for stage, entrants in pool.map(fetch_stage, stage_numbers):
+                stage['surface'] = snapshot['surface']
+                snapshot['stages'].append(stage)
+                for entrant in entrants:
+                    entrants_by_name[entrant['driver_name']] = entrant
+        snapshot['entrants'] = list(entrants_by_name.values())
+        return snapshot
+
+    def _parse_live_page(self, soup):
+        table = self._select_results_table(soup)
+        stage = self._parse_stage_table(table, allow_empty=True) if table else None
+        if stage and not stage['stage_number']:
+            stage = None
+        entrants = []
+        rows = list((stage or {}).get('results', []))
+        # Queue, DNS/DNF and overall tables contribute identities only. Their
+        # timing columns must never be treated as a stage result.
+        for candidate in soup.find_all('table'):
+            if candidate is table:
+                continue
+            for row in candidate.find_all('tr'):
+                cells = row.find_all(['td', 'th'])
+                if len(cells) < 7 or not re.fullmatch(r'#?\d+', cells[1].get_text(strip=True)):
+                    continue
+                result = self._parse_result_row(row)
+                if result:
+                    rows.append(result)
+        for row in rows:
+            name = str(row.get('driver_name') or '').strip()
+            if name:
+                entrants.append({key: row.get(key, '') for key in ('driver_name', 'car_number', 'car_class')})
+        return stage, entrants
+
     def fetch_rally_from_url(self, url: str) -> Optional[Dict]:
         """TOSFED URL'sinden rally_id cikar ve veri cek.
 
@@ -394,7 +570,11 @@ class TOSFEDSonucScraper:
         suggested_stage = int(etp_match.group(1)) if etp_match else None
 
         # Mevcut fetch_rally_stages ile veri cek
-        result = self.fetch_rally_stages(rally_id)
+        parsed_url = urlparse(url)
+        preferred_host = f"https://{parsed_url.hostname}" if parsed_url.hostname else None
+        result = self.fetch_rally_stages(rally_id, preferred_host=preferred_host)
+        if result is None and self.results_unavailable_message:
+            raise ResultsNotPublishedError(self.results_unavailable_message)
 
         if result and suggested_stage is not None:
             result['suggested_stage'] = suggested_stage

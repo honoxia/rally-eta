@@ -15,6 +15,23 @@ Rally Result Prediction is a desktop-oriented Streamlit application for rally st
 - KML and stage geometry management
 - Training, settings, reports, and portable Windows build workflow
 
+## Live Race Dashboard
+
+The default Operation Mode view is `Canlı Yarış`. Enter a TOSFED race URL once
+and select `Yarışı Takip Et`. While this page stays open, the app checks every
+60 seconds and recalculates all stages and all entrants when results change.
+Choose an `Etap` to see its actual times, km-based estimates, percentage-based
+estimates and baseline estimates in one table. `Şimdi Yenile` checks immediately;
+the toggle pauses automatic updates. CSV export contains the selected stage.
+
+Unstarted stages and waiting entrants remain visible. Missing references or
+same-class finishes are shown as waiting for data, never as zero times. Baseline
+estimates are not labeled ML. These are rolling estimates using currently known
+results, not frozen pre-stage predictions. Updates do not save official decisions
+or prediction-log rows. The existing `Tek Pilot / Karar` view remains available
+for explicitly recording an official choice. If a refresh fails, the last
+successful table stays visible with a warning.
+
 ## Manual Calculator
 
 The `Manuel Hesap` module is designed for fast in-app fallback calculations without opening Excel.
